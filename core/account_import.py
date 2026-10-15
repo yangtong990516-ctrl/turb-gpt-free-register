@@ -14,13 +14,82 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # 视为同一个分隔符（``----`` 不会拆成两个 ``--``）。
 _FIELD_SEPARATOR_RE = re.compile(r"-{2,}")
 
+# “完整导出”格式（账号页「下载完整导出」生成，可整行回流导入）：
+#     邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥
+# 2FA 段固定带 “2FA:” 前缀，站点占位固定为 https://2fa.run/，密码段可以为空。
+# 只按前三个分隔符切分，因此取码链接里的普通短横线不会影响解析。
+_EXPORT_LINE_RE = re.compile(r"^(?P<head>.+?)\s*-{2,}\s*2FA:\s*(?P<totp>.*)$", re.IGNORECASE)
+_EXPORT_2FA_URL_RE = re.compile(r"^https?://2fa\.run/?$", re.IGNORECASE)
+# 2FA 密钥可能被粘贴成 ``2FA:密钥``（旧格式里只会按普通密钥处理）。
+_TWOFA_PREFIX_RE = re.compile(r"^2FA:\s*", re.IGNORECASE)
+
+_LEGACY_FORMAT_HINT = "格式错误，需要邮箱、密码、2FA，可选 AT（分隔符可用 --、--- 或 ----）"
+_EXPORT_FORMAT_HINT = (
+    "格式错误，需要邮箱---密码---2FA[---AT]，或完整导出的 "
+    "邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥"
+)
+
+
+def _parse_export_line(line: str) -> dict | None:
+    """按“完整导出”格式解析一行；不是该格式（没有 ``2FA:`` 段）时返回 None。
+
+    返回字段：email、email_api（邮箱接码API）、password（可为空）、
+    totp_secret、access_token，并标记 ``from_full_export``。空字段会被相邻
+    分隔符收拢（``------`` 表示空密码），因此第二段按格式约定固定是接码链接。
+    """
+    match = _EXPORT_LINE_RE.match(line)
+    if match is None:
+        return None
+
+    # 2FA 段之后如果还跟了 ``--AT``，按旧格式同样支持。
+    tail = [part.strip() for part in _FIELD_SEPARATOR_RE.split(match.group("totp"))]
+    totp_secret = (tail[0] if tail else "").replace(" ", "")
+    access_token = tail[1].strip() if len(tail) > 1 else ""
+
+    head = match.group("head").strip()
+    fields = [part.strip() for part in _FIELD_SEPARATOR_RE.split(head)]
+    if fields and _EXPORT_2FA_URL_RE.match(fields[-1] or ""):
+        fields.pop()
+    elif len(fields) < 3:
+        # 既没有站点占位，又拆不出“邮箱/接码API/密码”三段：交给旧格式处理，
+        # 例如 “邮箱---密码---2FA:密钥”。
+        return None
+
+    return {
+        "email": fields[0] if fields else "",
+        "email_api": fields[1] if len(fields) > 1 else "",
+        "password": fields[2] if len(fields) > 2 else "",
+        "totp_secret": totp_secret,
+        "access_token": access_token or (fields[3] if len(fields) > 3 else ""),
+        "from_full_export": True,
+    }
+
+
+def _parse_legacy_line(line: str) -> dict | None:
+    """按 ``邮箱--密码--2FA[--AT]`` 解析一行；分隔符不足时返回 None。"""
+    parts = [part.strip() for part in _FIELD_SEPARATOR_RE.split(line, maxsplit=3)]
+    if len(parts) not in (3, 4):
+        return None
+    email, password, totp_secret = parts[:3]
+    return {
+        "email": email,
+        "password": password,
+        "totp_secret": _TWOFA_PREFIX_RE.sub("", totp_secret).replace(" ", ""),
+        "access_token": parts[3] if len(parts) == 4 else "",
+    }
+
 
 def parse_existing_account_text(text: str, *, max_lines: int = 5000) -> tuple[list[dict], list[dict]]:
-    """解析 ``邮箱--密码--2FA[--AT]``，返回 (有效记录, 无效行详情)。
+    """解析已有账号导入文本，返回 (有效记录, 无效行详情)。
 
-    分隔符兼容 ``--``、``---``、``----`` 三种样式；只按前三个分隔符切分，
-    因此 AT 中的普通短横线不会影响解析。错误详情只返回行号和原因，避免把
-    凭据回显到页面。
+    支持两种格式：
+      - 旧格式 ``邮箱--密码--2FA[--AT]``；
+      - 账号页「完整导出」格式 ``邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥``
+        （密码段可以为空，导入时会把接码链接回填到通用 API 邮箱池）。
+
+    分隔符兼容 ``--``、``---``、``----`` 三种样式；旧格式只按前三个分隔符切分，
+    因此 AT 中的普通短横线不会影响解析。错误详情只返回行号和原因，避免把凭据
+    回显到页面。
     """
     records: list[dict] = []
     errors: list[dict] = []
@@ -35,17 +104,22 @@ def parse_existing_account_text(text: str, *, max_lines: int = 5000) -> tuple[li
             errors.append({"line": line_number, "reason": f"单次最多导入 {max_lines} 行"})
             break
 
-        parts = [part.strip() for part in _FIELD_SEPARATOR_RE.split(line, maxsplit=3)]
-        if len(parts) not in (3, 4):
-            errors.append({
-                "line": line_number,
-                "reason": "格式错误，需要邮箱、密码、2FA，可选 AT（分隔符可用 --、--- 或 ----）",
-            })
+        record = _parse_export_line(line)
+        if record is None:
+            record = _parse_legacy_line(line)
+        if record is None:
+            errors.append({"line": line_number, "reason": f"{_EXPORT_FORMAT_HINT}；或 {_LEGACY_FORMAT_HINT}"})
             continue
 
-        email, password, totp_secret = parts[:3]
-        access_token = parts[3] if len(parts) == 4 else ""
-        if not email or not password or not totp_secret:
+        email = record["email"]
+        password = record["password"]
+        totp_secret = record["totp_secret"]
+        if record.get("from_full_export"):
+            # 完整导出格式的密码段允许为空（由接码链接兜底登录）。
+            if not email or not totp_secret:
+                errors.append({"line": line_number, "reason": "邮箱和 2FA 都不能为空"})
+                continue
+        elif not email or not password or not totp_secret:
             errors.append({"line": line_number, "reason": "邮箱、密码和 2FA 都不能为空"})
             continue
         if not _EMAIL_RE.fullmatch(email):
@@ -57,12 +131,16 @@ def parse_existing_account_text(text: str, *, max_lines: int = 5000) -> tuple[li
             errors.append({"line": line_number, "email": email, "reason": "本次内容中邮箱重复"})
             continue
         seen_emails.add(email_key)
-        records.append({
+        item = {
             "email": email,
             "password": password,
-            "totp_secret": totp_secret.replace(" ", ""),
-            "access_token": access_token,
-        })
+            "totp_secret": totp_secret,
+            "access_token": record["access_token"],
+        }
+        if record.get("from_full_export"):
+            item["email_api"] = record.get("email_api", "")
+            item["from_full_export"] = True
+        records.append(item)
 
     return records, errors
 

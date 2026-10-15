@@ -4,6 +4,7 @@ const open = ref(false);
 let previousBodyOverflow = "";
 const links = [
   { to: "/", label: "工作台", icon: "grid", caption: "注册与概览" },
+  { to: "/activation", label: "开通工作台", icon: "bolt", caption: "Plus 激活与支付" },
   { to: "/accounts", label: "账号管理", icon: "users", caption: "账号与订阅" },
   { to: "/tasks", label: "任务中心", icon: "tasks", caption: "进度与日志" },
   { to: "/codex", label: "Codex 授权", icon: "key", caption: "授权与凭证" },

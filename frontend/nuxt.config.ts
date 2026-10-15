@@ -1,4 +1,5 @@
 import process from "node:process";
+import tailwindcss from "@tailwindcss/vite";
 
 const apiTarget = process.env.NUXT_API_PROXY || "http://127.0.0.1:5000";
 
@@ -6,7 +7,13 @@ export default defineNuxtConfig({
   compatibilityDate: "2026-01-01",
   ssr: false,
   devtools: { enabled: false },
-  css: ["~/assets/css/main.css"],
+  css: ["~/assets/css/tailwind.css", "~/assets/css/main.css"],
+  modules: ["shadcn-nuxt"],
+  shadcn: {
+    prefix: "",
+    componentDir: "./app/components/ui",
+  },
+  vite: { plugins: [tailwindcss()] },
   app: {
     head: {
       title: "Registrator · 工作台",
@@ -27,6 +34,7 @@ export default defineNuxtConfig({
         "/login",
         "/redeem",
         "/accounts",
+        "/activation",
         "/tasks",
         "/mailboxes",
         "/codex",

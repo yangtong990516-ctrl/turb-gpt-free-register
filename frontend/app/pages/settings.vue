@@ -13,6 +13,13 @@ interface Field {
 }
 const api = useApi(),
   toast = useToast();
+const themeStore = useTheme();
+const theme = themeStore.theme;
+const setTheme = themeStore.setTheme;
+function changeTheme(value: unknown) {
+  if (value === "shadcn" || value === "classic") setTheme(value);
+}
+
 const fields = ref<Field[]>([]),
   values = reactive<Record<string, any>>({}),
   saved = ref<Record<string, any>>({});
@@ -84,7 +91,11 @@ function chainMove(field: Field, index: number, delta: number) {
   const items = chainItems(field);
   const target = index + delta;
   if (target < 0 || target >= items.length) return;
-  [items[index], items[target]] = [items[target], items[index]];
+  const current = items[index];
+  const next = items[target];
+  if (current === undefined || next === undefined) return;
+  items[index] = next;
+  items[target] = current;
   chainSet(field, items);
 }
 function chainRemove(field: Field, index: number) {
@@ -414,6 +425,31 @@ onBeforeRouteLeave(
         }}
       </button>
     </div>
+    <Card class="theme-card">
+      <CardHeader class="theme-card-header">
+        <div><CardTitle>外观主题</CardTitle><CardDescription>选择 Nuxt 前端的界面配色，偏好保存在此浏览器。</CardDescription></div>
+      </CardHeader>
+      <CardContent>
+        <RadioGroup :model-value="theme" class="theme-options" aria-label="外观主题" @update:model-value="changeTheme">
+          <div class="theme-option-wrap">
+            <RadioGroupItem id="theme-shadcn" value="shadcn" />
+            <label for="theme-shadcn" class="theme-option">
+              <span class="theme-preview theme-preview-shadcn"><i></i><i></i><i></i></span>
+              <span class="theme-option-copy"><strong>shadcn</strong><small>中性灰白 · 默认</small></span>
+              <UiIcon v-if="theme === 'shadcn'" name="check" :size="16" />
+            </label>
+          </div>
+          <div class="theme-option-wrap">
+            <RadioGroupItem id="theme-classic" value="classic" />
+            <label for="theme-classic" class="theme-option">
+              <span class="theme-preview theme-preview-classic"><i></i><i></i><i></i></span>
+              <span class="theme-option-copy"><strong>现有主题</strong><small>青绿色 · 原版配色</small></span>
+              <UiIcon v-if="theme === 'classic'" name="check" :size="16" />
+            </label>
+          </div>
+        </RadioGroup>
+      </CardContent>
+    </Card>
     <div v-if="error" class="alert alert-error" role="alert">
       {{ error }} <button class="btn btn-sm" @click="load">重新加载</button>
     </div>
@@ -848,6 +884,29 @@ onBeforeRouteLeave(
   </div>
 </template>
 <style scoped>
+.theme-card { margin-bottom: 22px; }
+.theme-card-header { padding: 19px 22px 12px; }
+.theme-card-header p { margin-top: 4px; font-size: 11px; }
+.theme-card [data-slot="card-content"] { padding: 0 22px 20px; }
+.theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.theme-option-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.theme-option-wrap [data-slot="radio-group-item"] { flex: none; }
+.theme-option { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; padding: 9px; text-align: left; color: inherit; background: #fff; border: 1px solid #e4e7eb; border-radius: 6px; cursor: pointer; }
+.theme-option-wrap:has([data-state="checked"]) .theme-option { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.theme-option > svg { margin-left: auto; color: var(--accent); }
+.theme-option-copy { display: grid; gap: 2px; }
+.theme-option-copy strong { font-size: 11px; }
+.theme-option-copy small { color: #858f9b; font-size: 9px; }
+.theme-preview { width: 72px; height: 48px; flex: none; display: grid; grid-template-columns: 18px 1fr; grid-template-rows: 8px 1fr; gap: 3px; padding: 4px; border: 1px solid #e2e4e8; border-radius: 4px; background: #fafafa; }
+.theme-preview i { display: block; border-radius: 2px; background: #e4e4e7; }
+.theme-preview i:first-child { grid-column: 1 / -1; background: #18181b; }
+.theme-preview i:nth-child(2) { grid-row: 2; background: #e4e4e7; }
+.theme-preview i:nth-child(3) { grid-row: 2; grid-column: 2; background: #fff; border: 1px solid #e4e4e7; }
+.theme-preview-classic { background: #f6f8fa; }
+.theme-preview-classic i:first-child { background: #0f766e; }
+.theme-preview-classic i:nth-child(2) { background: #eaf6f2; }
+.theme-preview-classic i:nth-child(3) { background: #fff; border-color: #e7ebef; }
+@media (max-width: 600px) { .theme-options { grid-template-columns: 1fr; } }
 .upload-keys-card {
   margin-bottom: 22px;
 }

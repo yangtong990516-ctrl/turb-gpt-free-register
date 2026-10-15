@@ -240,16 +240,22 @@ def enqueue_account_totp_setup(
     access_token: str,
     trigger: str = "manual",
     proxy: str | None = None,
+    allow_existing: bool = False,
 ) -> dict:
     global _OUTSTANDING
     apply_settings()
     account_id = int(account_id)
     email = str(email or "").strip()
     access_token = str(access_token or "").strip()
+    account = db.get_account(account_id) or {}
     if not email:
         return {"accepted": False, "busy": False, "error": "email 为空"}
     if not access_token:
         return {"accepted": False, "busy": False, "error": "缺少 access_token"}
+    if allow_existing and not str(account.get("totp_secret") or "").strip():
+        return {"accepted": False, "busy": False, "error": "该账号尚未开启 2FA"}
+    if not allow_existing and str(account.get("totp_secret") or "").strip():
+        return {"accepted": False, "busy": False, "error": "该账号已经开启 2FA"}
     if not bool(getattr(_email_cfg, "USE_EMAIL_SERVICE", False)):
         return {"accepted": False, "busy": False, "error": "启用 2FA 需要先开启 USE_EMAIL_SERVICE 自动收取邮箱验证码"}
     with _LOCK:

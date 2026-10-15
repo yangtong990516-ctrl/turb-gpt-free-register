@@ -181,9 +181,9 @@ onMounted(loadSavedKeys);
             <small v-if="fileName" class="muted">已读取 {{ fileName }}，可在下方修改。</small>
           </label>
           <label class="field">账号内容
-            <textarea v-model="text" class="textarea mono upload-text" rows="12" :disabled="busy" spellcheck="false" autocomplete="off" placeholder="user@example.com--password--2FA_SECRET--access_token" />
+            <textarea v-model="text" class="textarea mono upload-text" rows="12" :disabled="busy" spellcheck="false" autocomplete="off" placeholder="user@example.com--password--2FA_SECRET--access_token&#10;或完整导出：user@example.com---gptmail---password---https://2fa.run/----2FA:SECRET" />
           </label>
-          <small class="muted">{{ lines }} 行。格式：邮箱--密码--2FA（可追加 --AT）；不带 AT 的新账号导入后自动查活。最多 5000 行 / 10 MiB。</small>
+          <small class="muted">{{ lines }} 行。格式：邮箱--密码--2FA（可追加 --AT），或完整导出的 邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥；不带 AT 的新账号导入后自动查活。最多 5000 行 / 10 MiB。</small>
           <p v-if="error" class="alert alert-error" role="alert">{{ error }}</p>
           <section v-if="result" class="import-result" aria-live="polite">
             <strong v-if="result.ok">上传完成：已解析 {{ result.parsed }} 个，新增 {{ result.inserted }} 个，跳过 {{ result.skipped }} 个。</strong>

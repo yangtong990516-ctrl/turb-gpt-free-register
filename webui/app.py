@@ -545,7 +545,7 @@ def create_app(auth_code: str | None = None, *, data_dir=None) -> Flask:
         if not records:
             return jsonify({
                 "ok": False,
-                "error": "未解析到有效账号行，请使用：邮箱--密码--2FA[--AT]（AT 可省略，分隔符可用 --、--- 或 ----）",
+                "error": "未解析到有效账号行，请使用：邮箱--密码--2FA[--AT]，或完整导出的 邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥（分隔符可用 --、--- 或 ----）",
                 "parsed": 0,
                 "inserted": 0,
                 "skipped": len(parse_errors),
@@ -1048,7 +1048,9 @@ def create_app(auth_code: str | None = None, *, data_dir=None) -> Flask:
 
     @app.post("/api/accounts/import")
     def api_accounts_import():
-        """导入已有账号：邮箱--密码--2FA[--AT]（AT 可省略，分隔符可用 --、--- 或 ----），每行一个账号。"""
+        """导入已有账号，每行一个：邮箱--密码--2FA[--AT]（AT 可省略），或完整导出的
+        邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥（密码段可为空，
+        取码链接会回填到通用 API 邮箱池）；分隔符可用 --、--- 或 ----。"""
         data = request.get_json(silent=True) or {}
         text = data.get("text")
         if not isinstance(text, str) or not text.strip():
@@ -1060,7 +1062,7 @@ def create_app(auth_code: str | None = None, *, data_dir=None) -> Flask:
         if not records:
             return jsonify({
                 "ok": False,
-                "error": "未解析到有效账号行，请使用：邮箱--密码--2FA[--AT]（AT 可省略，分隔符可用 --、--- 或 ----）",
+                "error": "未解析到有效账号行，请使用：邮箱--密码--2FA[--AT]，或完整导出的 邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥（分隔符可用 --、--- 或 ----）",
                 "parsed": 0,
                 "inserted": 0,
                 "skipped": len(parse_errors),
@@ -1248,6 +1250,42 @@ def create_app(auth_code: str | None = None, *, data_dir=None) -> Flask:
             access_token=token,
             trigger="manual",
             proxy=str(acc.get("proxy_used") or "") or None,
+        )
+        queued_payload = {k: v for k, v in queued.items() if k != "future"}
+        if queued.get("busy"):
+            return jsonify({"ok": False, **queued_payload}), 409
+        if not queued.get("accepted"):
+            return jsonify({"ok": False, **queued_payload}), 503
+        return jsonify({
+            "ok": True,
+            "started": True,
+            "queue": twofa_service.queue_settings(),
+            **queued_payload,
+        }), 202
+
+    @app.post("/api/accounts/<int:acc_id>/totp-rebind")
+    def api_account_totp_rebind(acc_id: int):
+        """重新验证并更换单个账号的 TOTP 密钥。"""
+        acc = db.get_account(acc_id)
+        if not acc:
+            return jsonify({"ok": False, "error": "账号不存在"}), 404
+        if not str(acc.get("totp_secret") or "").strip():
+            return jsonify({"ok": False, "error": "该账号尚未开启 2FA"}), 400
+        token = str(acc.get("access_token") or "").strip()
+        if not token:
+            return jsonify({"ok": False, "error": "该账号没有 access_token"}), 400
+        try:
+            from core import twofa_service
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"2FA 服务加载失败：{type(exc).__name__}: {exc}"}), 503
+
+        queued = twofa_service.enqueue_account_totp_setup(
+            account_id=acc_id,
+            email=str(acc.get("email") or ""),
+            access_token=token,
+            trigger="manual_rebind",
+            proxy=str(acc.get("proxy_used") or "") or None,
+            allow_existing=True,
         )
         queued_payload = {k: v for k, v in queued.items() if k != "future"}
         if queued.get("busy"):

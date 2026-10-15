@@ -7,17 +7,77 @@
     "PingFang SC",
     "Microsoft YaHei",
     sans-serif;
-  color: #243347;
-  background: #f6f8fa;
+  color: #09090b;
+  background: #ffffff;
   font-size: 14px;
   line-height: 1.6;
   font-synthesis: none;
+  --accent: #18181b;
+  --accent-light: #f4f4f5;
+  --border: #e4e4e7;
+  --muted: #71717a;
+  --danger: #dc2626;
+  --background: #ffffff;
+  --foreground: #09090b;
+  --surface: #ffffff;
+  --surface-secondary: #f4f4f5;
+  --text-secondary: #71717a;
+  --ring: #a1a1aa;
+  --radius: 6px;
+}
+:root[data-theme="classic"] {
+  color: #243347;
+  background: #f6f8fa;
   --accent: #0f766e;
   --accent-light: #eaf6f2;
   --border: #e7ebef;
   --muted: #84909f;
   --danger: #c74646;
+  --background: #f6f8fa;
+  --foreground: #243347;
+  --surface: #fff;
+  --surface-secondary: #f4f6f7;
+  --text-secondary: #84909f;
+  --ring: #8bd3c7;
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --sidebar-primary: #0f766e;
+  --sidebar-primary-foreground: #ffffff;
 }
+:root[data-theme="shadcn"] {
+  color: var(--foreground);
+  background: var(--background);
+  --accent: #18181b;
+  --accent-light: #f4f4f5;
+  --border: #e4e4e7;
+  --muted: #71717a;
+  --danger: #dc2626;
+}
+:root[data-theme="shadcn"] body { color: var(--foreground); background: var(--background); }
+:root[data-theme="shadcn"] h1,
+:root[data-theme="shadcn"] h2,
+:root[data-theme="shadcn"] h3 { color: #18181b; }
+:root[data-theme="shadcn"] .sidebar,
+:root[data-theme="shadcn"] .topbar,
+:root[data-theme="shadcn"] .card,
+:root[data-theme="shadcn"] .modal,
+:root[data-theme="shadcn"] .table-wrap,
+:root[data-theme="shadcn"] .settings-nav,
+:root[data-theme="shadcn"] .settings-panel { background-color: #fff; border-color: #e4e4e7; box-shadow: none; }
+:root[data-theme="shadcn"] .workspace { background: #fafafa; }
+:root[data-theme="shadcn"] .topbar { background: #ffffffed; }
+:root[data-theme="shadcn"] .btn:not(.btn-primary):not(.btn-danger) { border-color: #e4e4e7; color: #3f3f46; background-color: #fff; border-radius: 5px; }
+:root[data-theme="shadcn"] .btn:not(.btn-primary):not(.btn-danger):hover:not(:disabled) { background-color: #f4f4f5; }
+:root[data-theme="shadcn"] .btn-primary { background: #18181b; border-color: #18181b; border-radius: 5px; }
+:root[data-theme="shadcn"] .btn-primary:hover:not(:disabled) { background: #27272a; border-color: #27272a; }
+:root[data-theme="shadcn"] .nav-link.active,
+:root[data-theme="shadcn"] .frontend-switch-link.active { color: #18181b; background: #f4f4f5; }
+:root[data-theme="shadcn"] input:not([type="checkbox"]),
+:root[data-theme="shadcn"] select,
+:root[data-theme="shadcn"] textarea { border-color: #e4e4e7; border-radius: 5px; }
+:root[data-theme="shadcn"] .data-table th { background: #fafafa; color: #71717a; }
+:root[data-theme="shadcn"] .data-table tbody tr:hover { background: #fafafa; }
+:root[data-theme="shadcn"] :focus-visible { outline-color: #a1a1aa; }
 * {
   box-sizing: border-box;
 }

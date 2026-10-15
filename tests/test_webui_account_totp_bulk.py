@@ -81,6 +81,45 @@ class WebUiAccountTotpBulkTests(unittest.TestCase):
                 self.assertNotIn("future", body["started"][0])
                 self.assertNotIn("future", body["busy"][0])
 
+    def test_single_totp_rebind_queues_existing_account(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "accounts.json").write_text(json.dumps([
+                {"id": 7, "email": "rotate@example.com", "access_token": "token", "totp_secret": "OLDSECRET"},
+            ]), encoding="utf-8")
+            with patch.multiple(db, **self._storage_patches(root)):
+                app = create_app(auth_code="test-auth")
+                client = app.test_client()
+                with patch("core.twofa_service.enqueue_account_totp_setup", return_value={
+                    "accepted": True, "busy": False, "future": object(), "log_path": "/tmp/twofa.log",
+                }) as enqueue:
+                    response = client.post(
+                        "/api/accounts/7/totp-rebind",
+                        json={},
+                        headers={"X-Auth-Code": "test-auth"},
+                    )
+                self.assertEqual(response.status_code, 202)
+                self.assertTrue(response.get_json()["ok"])
+                self.assertNotIn("future", response.get_json())
+                self.assertEqual(enqueue.call_args.kwargs["allow_existing"], True)
+                self.assertEqual(enqueue.call_args.kwargs["trigger"], "manual_rebind")
+
+    def test_single_totp_rebind_rejects_account_without_existing_secret(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "accounts.json").write_text(json.dumps([
+                {"id": 8, "email": "plain@example.com", "access_token": "token"},
+            ]), encoding="utf-8")
+            with patch.multiple(db, **self._storage_patches(root)):
+                app = create_app(auth_code="test-auth")
+                response = app.test_client().post(
+                    "/api/accounts/8/totp-rebind",
+                    json={},
+                    headers={"X-Auth-Code": "test-auth"},
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("尚未开启", response.get_json()["error"])
+
     def test_bulk_setup_validates_empty_and_maximum(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -1608,14 +1608,23 @@ def _generic_api_email_line(row: dict) -> str:
     ])
 
 
+_CODE_URL_RE = re.compile(r"^https?:?//", re.IGNORECASE)
+
+
+def _looks_like_code_url(value: object) -> bool:
+    """判断“邮箱接码API”字段是否是取码链接（兼容 ``https//`` 漏写冒号）。"""
+    return bool(_CODE_URL_RE.match(str(value or "").strip()))
+
+
 def _normalize_generic_api_code_url(value: object) -> str:
-    """修复导入文本中误粘贴到 URL 前面的短横线。"""
+    """修复取码链接里的常见粘贴错误：前缀短横线、``https//`` 漏写冒号。"""
     url = str(value or "").strip()
     if url.startswith("-"):
         candidate = url.lstrip("-")
         if candidate.lower().startswith(("http://", "https://")):
-            return candidate
-    return url
+            url = candidate
+    # 兼容 “https//host/...” 这类漏写冒号的粘贴结果（协议名后必须跟 “://”）。
+    return re.sub(r"^(https?)//", r"\1://", url, count=1, flags=re.IGNORECASE)
 
 
 def _imap_email_line(row: dict) -> str:
@@ -4629,15 +4638,24 @@ def delete_accounts(account_ids: list[int] | None = None, emails: list[str] | No
     return deleted, skipped
 
 
+_IMPORTED_CODE_URL_NOTE = "从完整导出导入账号时回填的取码链接"
+
+
 def import_existing_accounts(records: list[dict]) -> tuple[int, list[dict]]:
     """直接导入已有账号，不要求邮箱池素材。
 
-    records 元素：{email, password, totp_secret, access_token[, user_name]}。
+    records 元素：{email, password, totp_secret, access_token[, user_name]}；
+    另兼容“完整导出”行解析出的 {email_api, from_full_export}：
+      - email_api 是取码链接时回填到通用 API 邮箱池并标记 used，账号来源记为
+        generic_api，导入后可直接按该链接取码；
+      - from_full_export 的行允许密码段为空（由接码链接兜底登录）。
+
     password 是 ChatGPT 账号密码，存入 extra_json.registration_password；
     返回 (新增数, 跳过详情)。邮箱按大小写不敏感去重。
     """
     with _LOCK:
         accounts = _load_accounts()
+        generic_rows = None
         inserted = 0
         skipped: list[dict] = []
         seen_emails: set[str] = set()
@@ -4647,10 +4665,15 @@ def import_existing_accounts(records: list[dict]) -> tuple[int, list[dict]]:
             password = str(raw.get("password") or "").strip()
             totp_secret = str(raw.get("totp_secret") or raw.get("totp") or "").strip()
             access_token = str(raw.get("access_token") or raw.get("token") or "").strip()
+            email_api = str(raw.get("email_api") or raw.get("code_url") or "").strip()
+            code_url = _normalize_generic_api_code_url(email_api) if _looks_like_code_url(email_api) else ""
             email_key = email.casefold()
             public_item = {"email": email} if email else {}
 
-            if not email or not password or not totp_secret:
+            if not email or not totp_secret:
+                skipped.append({**public_item, "reason": "邮箱和 2FA 都不能为空"})
+                continue
+            if not password and not code_url and not raw.get("from_full_export"):
                 skipped.append({**public_item, "reason": "邮箱、密码和 2FA 都不能为空"})
                 continue
             if email_key in seen_emails:
@@ -4662,21 +4685,52 @@ def import_existing_accounts(records: list[dict]) -> tuple[int, list[dict]]:
                 continue
 
             now = _now()
+            account_id = _next_id(accounts)
+            email_source = "imported"
+            original_email_line = email
+            if code_url:
+                if generic_rows is None:
+                    generic_rows = _load_generic_api_emails()
+                pool_row = _find_by_email(generic_rows, email)
+                if pool_row is None:
+                    pool_row = {
+                        "id": _next_id(generic_rows),
+                        "email": email,
+                        "code_url": code_url,
+                        "status": "used",
+                        "used_at": now,
+                        "note": _IMPORTED_CODE_URL_NOTE,
+                        "imported_at": now,
+                    }
+                    generic_rows.append(pool_row)
+                else:
+                    pool_row["code_url"] = code_url or pool_row.get("code_url")
+                pool_row["status"] = "used"
+                pool_row["used_at"] = pool_row.get("used_at") or now
+                pool_row["completed_at"] = pool_row.get("completed_at") or now
+                pool_row["note"] = pool_row.get("note") or _IMPORTED_CODE_URL_NOTE
+                pool_row["registered_account_id"] = account_id
+                pool_row["access_token"] = access_token
+                if totp_secret:
+                    pool_row["totp_secret"] = totp_secret
+                email_source = "generic_api"
+                original_email_line = _generic_api_email_line(pool_row)
+
             account = {
-                "id": _next_id(accounts),
+                "id": account_id,
                 "email": email,
                 "created_at": now,
                 "updated_at": now,
                 "access_token": access_token,
                 "totp_secret": totp_secret,
                 "user_name": str(raw.get("user_name") or "").strip() or "Imported Account",
-                "email_source": "imported",
+                "email_source": email_source,
                 "extra_json": json.dumps({
                     "imported_existing_account": True,
                     "registration_password": password,
                 }, ensure_ascii=False),
                 "codex_status": "",
-                "original_email_line": email,
+                "original_email_line": original_email_line,
             }
             account["copy_line"] = _account_line(account)
             accounts.append(account)
@@ -4684,6 +4738,8 @@ def import_existing_accounts(records: list[dict]) -> tuple[int, list[dict]]:
 
         if inserted:
             _save_accounts(accounts)
+        if generic_rows is not None:
+            _save_generic_api_emails(generic_rows)
         return inserted, skipped
 
 

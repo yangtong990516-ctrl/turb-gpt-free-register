@@ -26,4 +26,6 @@
 </template>
 <script setup lang="ts">
 const { toasts, dismiss } = useToast();
+const { initialize } = useTheme();
+onMounted(initialize);
 </script>

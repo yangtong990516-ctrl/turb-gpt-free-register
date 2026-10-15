@@ -72,9 +72,10 @@ async function submit() {
   <UiModal v-model:open="open" title="导入已有账号">
     <form id="accounts-import" class="stack" @submit.prevent="submit">
       <p class="muted">
-        每行一个账号，格式：邮箱--密码--2FA 或 邮箱--密码--2FA--AT；分隔符可用 --、--- 或 ----。
-        邮箱、密码和 2FA 必填；不带 AT 的新账号导入后自动查活，成功后补齐 AT。最多
-        5000 行 / 10 MiB。
+        每行一个账号，格式：邮箱--密码--2FA 或 邮箱--密码--2FA--AT；也支持账号页「完整导出」的
+        邮箱---邮箱接码API---密码---https://2fa.run/----2FA:密钥（密码段可为空，取码链接会回填到
+        通用 API 邮箱池）。分隔符可用 --、--- 或 ----。邮箱、密码和 2FA 必填；不带 AT 的新账号导入后
+        自动查活，成功后补齐 AT。最多 5000 行 / 10 MiB。
       </p>
       <label class="field"
         >从文本文件导入<input
@@ -94,7 +95,7 @@ async function submit() {
           :disabled="busy"
           spellcheck="false"
           autocomplete="off"
-          placeholder="user@example.com--password--2FA_SECRET"
+          placeholder="user@example.com--password--2FA_SECRET&#10;或完整导出：user@example.com---gptmail---password---https://2fa.run/----2FA:SECRET"
         />
       </label>
       <small class="muted"

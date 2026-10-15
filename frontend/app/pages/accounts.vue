@@ -510,6 +510,24 @@ function runBatch(value: string) {
   if (value === "delete") void deleteAccounts();
   else openOperation(value);
 }
+async function rebindTotp(account: Account) {
+  if (
+    !confirm(
+      `确定为 ${account.email} 换绑 2FA？\n\n系统将重新验证账号、激活新密钥并在成功后更新本地记录。`,
+    )
+  )
+    return;
+  try {
+    await request(`/api/accounts/${account.id}/totp-rebind`, {
+      method: "POST",
+      body: {},
+    });
+    toast.success("2FA 换绑任务已排队");
+    await loadAccounts(true);
+  } catch (cause) {
+    toast.error(accountError(cause));
+  }
+}
 async function copySecret(account: Account, field: string) {
   if (copyBusy.value) return;
   copyBusy.value = `${account.id}:${field}`;
@@ -1049,11 +1067,25 @@ async function afterOperation() {
                   ><button
                     v-if="row.totp_enabled"
                     class="btn btn-sm"
-                    :disabled="!!copyBusy"
+                    :disabled="!!copyBusy || ['queued', 'running'].includes(row.totp_setup_status || '')"
                     @click="copySecret(row, 'totp_code')"
                   >
                     复制验证码
+                  </button><button
+                    v-if="row.totp_enabled"
+                    class="btn btn-sm"
+                    :disabled="!!copyBusy || ['queued', 'running'].includes(row.totp_setup_status || '')"
+                    title="重新验证账号并更换 2FA 密钥"
+                    @click="rebindTotp(row)"
+                  >
+                    {{ ['queued', 'running'].includes(row.totp_setup_status || '') ? '换绑中' : '换绑' }}
                   </button>
+                  <span
+                    v-if="['queued', 'running'].includes(row.totp_setup_status || '')"
+                    class="muted account-meta"
+                  >
+                    {{ accountStatus(row.totp_setup_status) }}
+                  </span>
                 </div>
                 <div
                   v-if="row.totp_setup_status && !row.totp_enabled"
