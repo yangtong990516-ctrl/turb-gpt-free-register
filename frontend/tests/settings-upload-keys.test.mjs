@@ -90,6 +90,11 @@ function settingsPage(t, { keys = [KEY_ROW], legacy = false, reply, clipboard } 
       checkNow: async () => {},
       applyUpdate: async () => ({ message: "" }),
     }),
+    useTheme: () => ({
+      theme: vue.ref("shadcn"),
+      setTheme: () => {},
+      initialize: () => {},
+    }),
     onMounted: (fn) => mounted.push(fn),
     onBeforeUnmount: (fn) => unmounted.push(fn),
     onBeforeRouteLeave: () => {},

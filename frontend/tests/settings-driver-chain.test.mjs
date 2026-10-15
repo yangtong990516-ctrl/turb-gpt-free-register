@@ -104,6 +104,11 @@ function settingsPage(t, { fields = configFields(), reply } = {}) {
       checkNow: async () => {},
       applyUpdate: async () => ({ message: "" }),
     }),
+    useTheme: () => ({
+      theme: vue.ref("shadcn"),
+      setTheme: () => {},
+      initialize: () => {},
+    }),
     onMounted: (fn) => mounted.push(fn),
     onBeforeUnmount() {},
     onBeforeRouteLeave() {},
